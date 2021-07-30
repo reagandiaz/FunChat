@@ -33,9 +33,12 @@ namespace FunChat.Grains
         public Task Logout()
         {
             var userregistry = this.GrainFactory.GetGrain<IUserRegistry>(Guid.Empty);
-            userregistry.Remove(userInfo.Name);
-            userInfo = null;
-            isadmin = false;
+            if (userInfo != null)
+            {
+                userregistry.Remove(userInfo.Name);
+                userInfo = null;
+                isadmin = false;
+            }
             return Task.CompletedTask;
         }
 
