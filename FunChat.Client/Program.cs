@@ -73,7 +73,7 @@ namespace FunChat.Client
 
             IUser user = null;
             string username = string.Empty;
-            Guid userguid ;
+            Guid userguid;
             Dictionary<string, IChannel> channels = new Dictionary<string, IChannel>();
 
             bool end = false;
@@ -153,16 +153,21 @@ namespace FunChat.Client
                         break;
                     case "/message":
                         {
-                            if (parameters.Length == 3)
+                            if (parameters.Length >= 3)
                             {
                                 channels.TryGetValue(parameters[1], out IChannel ichannel);
                                 if (ichannel != null)
                                 {
-                                    bool success = await ichannel.Message(new Message(username, parameters[2]));
+
+                                    var offset = parameters[0].Length + parameters[1].Length + 2;
+
+                                    var message = input.Substring(offset, input.Length - offset);
+
+                                    bool success = await ichannel.Message(new Message(username, message));
                                     if (success)
-                                        Console.WriteLine($"message success:{parameters[2]}");
+                                        Console.WriteLine($"message success:{message}");
                                     else
-                                        Console.WriteLine($"message failed:{parameters[2]}");
+                                        Console.WriteLine($"message failed:{message}");
                                 }
                             }
                             else
@@ -288,7 +293,7 @@ namespace FunChat.Client
 
                     case "/exit":
                         {
-                            end = true;   
+                            end = true;
                         }
                         break;
                     default:
