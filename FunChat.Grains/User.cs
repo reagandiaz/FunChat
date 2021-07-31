@@ -117,7 +117,7 @@ namespace FunChat.Grains
                     channelInfo = await channel.Leave(userInfo.Name);
                     if (channelInfo.Name != String.Empty)
                     {
-                        if (!currentchannel.Contains(channelInfo.Name))
+                        if (currentchannel.Contains(channelInfo.Name))
                             currentchannel.Remove(channelInfo.Name);
                     }
                 }

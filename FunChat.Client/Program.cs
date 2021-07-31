@@ -59,7 +59,6 @@ namespace FunChat.Client
             string input;
 
             Console.WriteLine("/login [user] [password]");
-            Console.WriteLine("/logout");
             Console.WriteLine("/join [channel] [password]");
             Console.WriteLine("/message [channel] [message]");
             Console.WriteLine("/read [channel] [100max]");
@@ -69,19 +68,21 @@ namespace FunChat.Client
             Console.WriteLine("/channels");
             Console.WriteLine("/delete [channel]");
             Console.WriteLine("/exit");
+            Console.WriteLine("\n");
 
 
             IUser user = null;
             string username = string.Empty;
             Guid userguid = Guid.Empty;
             Dictionary<string, IChannel> channels = new Dictionary<string, IChannel>();
+            const string generic = "generic";
 
             bool end = false;
 
 
             do
             {
-                input = Console.ReadLine();
+                input = Console.ReadLine().Trim();
 
                 var parameters = input.Split(' ');
 
@@ -92,18 +93,21 @@ namespace FunChat.Client
                             if (parameters.Length == 3)
                             {
                                 user = client.GetGrain<IUser>(Guid.NewGuid());
-                                if (user != null)
-                                {
-                                    userguid = await user.Login(parameters[1], parameters[2]);
 
-                                    if (userguid != Guid.Empty)
-                                    {
-                                        Console.WriteLine($"login success: {userguid}");
-                                        username = parameters[1];
-                                    }
-                                    else
-                                        Console.WriteLine("login failed!");
+                                userguid = await user.Login(parameters[1], parameters[2]);
+
+                                if (userguid != Guid.Empty)
+                                {
+                                    Console.WriteLine($"login success: {userguid}");
+                                    username = parameters[1];
+                                    var channelguid = await user.LocateChannel(generic);
+                                    var channel = client.GetGrain<IChannel>(channelguid);
+                                    channels.Clear();
+                                    channels.Add(generic, channel);
                                 }
+                                else
+                                    Console.WriteLine("login failed!");
+
                             }
                             else
                                 Console.WriteLine("Invalid Parameters");
@@ -125,7 +129,9 @@ namespace FunChat.Client
                                     if (channel.Name == parameters[1])
                                     {
                                         Console.WriteLine($"join success: {channel.Name}");
-                                        channels.Add(channel.Name, client.GetGrain<IChannel>(channel.Key));
+
+                                        if (!channels.ContainsKey(channel.Name))
+                                            channels.Add(channel.Name, client.GetGrain<IChannel>(channel.Key));
                                     }
                                     else
                                         Console.WriteLine($"join failed: {parameters[1]}");
@@ -147,7 +153,7 @@ namespace FunChat.Client
                                 {
                                     var offset = parameters[0].Length + parameters[1].Length + 2;
 
-                                    var message = input.Substring(offset, input.Length - offset);
+                                    var message = input[offset..];
 
                                     bool success = await ichannel.Message(new UserInfo() { Name = username, Key = userguid }, new Message(message));
                                     if (success)
@@ -260,7 +266,6 @@ namespace FunChat.Client
                                     }
                                     else
                                         Console.WriteLine($"delete failed: {parameters[1]}");
-
                                 }
                                 else
                                     Console.WriteLine("user null: please login");
@@ -282,8 +287,6 @@ namespace FunChat.Client
                         break;
                 }
             } while (!end);
-
         }
-
     }
 }

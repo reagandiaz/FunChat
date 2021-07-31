@@ -44,7 +44,6 @@ namespace FunChat.Silo
                     options.ClusterId = "dev";
                     options.ServiceId = "OrleansBasics";
                 })
-                //.ConfigureApplicationParts(parts => parts.AddApplicationPart(typeof(HelloGrain).Assembly).WithReferences())
                 .ConfigureLogging(logging => logging.AddConsole())
                 .AddMemoryGrainStorage("PubSubStore");
 
