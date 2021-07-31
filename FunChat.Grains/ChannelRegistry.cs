@@ -47,7 +47,7 @@ namespace FunChat.Grains
 
         public async Task<ChannelInfo[]> GetAllChannels()
         {
-            ChannelInfo[] info = Array.Empty<ChannelInfo>(); 
+            ChannelInfo[] info = Array.Empty<ChannelInfo>();
             if (activechannels.Count > 0)
                 info = activechannels.Select(s => new ChannelInfo() { Key = s.Value, Name = s.Key }).ToArray();
             return await Task.FromResult(info);
@@ -62,6 +62,26 @@ namespace FunChat.Grains
                 await Task.FromResult(activechannels.Remove(name));
             }
             return guid;
+        }
+
+        public async Task<ChannelInfo[]> UpdateMembership(UserInfo userinfo)
+        {
+            List<ChannelInfo> channels = new List<ChannelInfo>();
+            const int maxchannel = 3;
+            int ctr = 0;
+            foreach (var item in activechannels)
+            {
+                var channel = this.GrainFactory.GetGrain<IChannel>(item.Value);
+                var channelinfo = await channel.UpdateUserInfo(userinfo);
+                if (channelinfo.Key != Guid.Empty)
+                {
+                    ctr++;
+                    channels.Add(channelinfo);
+                }
+                if (ctr == maxchannel)
+                    break;
+            }
+            return channels.ToArray();
         }
     }
 }

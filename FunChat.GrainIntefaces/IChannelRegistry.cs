@@ -9,5 +9,6 @@ namespace FunChat.GrainIntefaces
         Task<Guid> GetChannel(string name);
         Task<ChannelInfo[]> GetAllChannels();
         Task<Guid> Remove(string name);
+        Task<ChannelInfo[]> UpdateMembership(UserInfo userinfo);
     }
 }

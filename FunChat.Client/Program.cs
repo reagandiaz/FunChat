@@ -73,10 +73,11 @@ namespace FunChat.Client
 
             IUser user = null;
             string username = string.Empty;
-            Guid userguid;
+            Guid userguid = Guid.Empty;
             Dictionary<string, IChannel> channels = new Dictionary<string, IChannel>();
 
             bool end = false;
+
 
             do
             {
@@ -102,20 +103,6 @@ namespace FunChat.Client
                                     }
                                     else
                                         Console.WriteLine("login failed!");
-                                }
-                            }
-                            else
-                                Console.WriteLine("Invalid Parameters");
-                        }
-                        break;
-                    case "/logout":
-                        {
-                            if (parameters.Length == 1)
-                            {
-                                if (user != null)
-                                {
-                                    Console.WriteLine($"logout Success: {username}");
-                                    await user.Logout();
                                 }
                             }
                             else
@@ -158,12 +145,11 @@ namespace FunChat.Client
                                 channels.TryGetValue(parameters[1], out IChannel ichannel);
                                 if (ichannel != null)
                                 {
-
                                     var offset = parameters[0].Length + parameters[1].Length + 2;
 
                                     var message = input.Substring(offset, input.Length - offset);
 
-                                    bool success = await ichannel.Message(new Message(username, message));
+                                    bool success = await ichannel.Message(new UserInfo() { Name = username, Key = userguid }, new Message(message));
                                     if (success)
                                         Console.WriteLine($"message success:{message}");
                                     else
@@ -303,6 +289,7 @@ namespace FunChat.Client
                         break;
                 }
             } while (!end);
+
         }
 
     }

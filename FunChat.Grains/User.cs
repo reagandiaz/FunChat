@@ -2,6 +2,7 @@
 using FunChat.Grains.Tools;
 using Orleans;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace FunChat.Grains
@@ -9,7 +10,6 @@ namespace FunChat.Grains
     public class UserGrain : Orleans.Grain, IUser
     {
         UserInfo userInfo;
-        short cntchannels;
         bool isadmin;
         readonly int[] loginlimit = new int[] { 3, 10 };
         readonly int[] channellimit = new int[] { 6, 18 };
@@ -17,29 +17,30 @@ namespace FunChat.Grains
         const string generic = "generic";
         const int maxchannel = 2;
 
+        readonly List<string> currentchannel = new List<string>();
+
         public async Task<Guid> Login(string username, string password)
         {
             Guid guid = Guid.Empty;
             if (username == password && (new NameValidator(username)).IsValid(loginlimit[0], loginlimit[1]))
             {
                 userInfo = new UserInfo() { Name = username, Key = this.GetGrainIdentity().PrimaryKey };
-                var userregistry = this.GrainFactory.GetGrain<IUserRegistry>(Guid.Empty);
                 isadmin = username == "Admin";
-                guid = (await userregistry.Add(userInfo.Name, userInfo.Key));
+                var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
+                
+                //update state
+                var membership = await channelregistry.UpdateMembership(userInfo);
+                for (int i = 0; i < membership.Length; i++)
+                {
+                    if (membership[i].Name != generic)
+                        currentchannel.Add(membership[i].Name);
+                }
+                //join generic chanel
+                await JoinChannel(generic, String.Empty);
+
+                guid = userInfo.Key;
             }
             return guid;
-        }
-
-        public Task Logout()
-        {
-            var userregistry = this.GrainFactory.GetGrain<IUserRegistry>(Guid.Empty);
-            if (userInfo != null)
-            {
-                userregistry.Remove(userInfo.Name);
-                userInfo = null;
-                isadmin = false;
-            }
-            return Task.CompletedTask;
         }
 
         public async Task<Guid> LocateChannel(string channel)
@@ -73,15 +74,18 @@ namespace FunChat.Grains
             ChannelInfo channelInfo = new ChannelInfo() { Key = Guid.Empty, Name = string.Empty };
             if (userInfo != null)
             {
-                if (channel == generic || (cntchannels < maxchannel && (new NameValidator(channel)).IsValid(channellimit[0], channellimit[1])))
+                if (channel == generic || (currentchannel.Count < maxchannel && (new NameValidator(channel)).IsValid(channellimit[0], channellimit[1])))
                 {
                     var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
                     var guid = (await channelregistry.GetChannel(channel));
                     var cchannel = this.GrainFactory.GetGrain<IChannel>(guid);
-                    channelInfo = await cchannel.Join(userInfo.Name, password);
+                    channelInfo = await cchannel.Join(userInfo, password);
                     //iterate if not generic
                     if (channelInfo.Name != generic && channelInfo.Name != String.Empty)
-                        cntchannels++;
+                    {
+                        if (!currentchannel.Contains(channelInfo.Name))
+                            currentchannel.Add(channelInfo.Name);
+                    }
                 }
             }
             return channelInfo;
@@ -112,7 +116,10 @@ namespace FunChat.Grains
                 {
                     channelInfo = await channel.Leave(userInfo.Name);
                     if (channelInfo.Name != String.Empty)
-                        cntchannels--;
+                    {
+                        if (!currentchannel.Contains(channelInfo.Name))
+                            currentchannel.Remove(channelInfo.Name);
+                    }
                 }
             }
             return channelInfo;
@@ -129,6 +136,23 @@ namespace FunChat.Grains
             return channelinfo;
         }
 
+        public async Task<string[]> GetChannelMembers(string channelname)
+        {
+            string[] members = Array.Empty<string>();
+            if (isadmin)
+            {
+                var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
+                var guid = await channelregistry.GetChannel(channelname);
+                if (guid != Guid.Empty)
+                {
+                    var channel = this.GrainFactory.GetGrain<IChannel>(guid);
+                    members = await channel.GetMembers();
+                }
+            }
+            return members;
+        }
+
+
         public async Task<Guid> RemoveChannel(string channelname)
         {
             Guid guid = Guid.Empty;
@@ -139,16 +163,6 @@ namespace FunChat.Grains
                 if (guid != Guid.Empty)
                 {
                     var channel = this.GrainFactory.GetGrain<IChannel>(guid);
-                    var members = await channel.GetMembers();
-                    var userregistry = this.GrainFactory.GetGrain<IUserRegistry>(Guid.Empty);
-                    var userinfo = await userregistry.GetMany(members);
-                    for (int i = 0; i > userinfo.Length; i++)
-                    {
-                        var user = this.GrainFactory.GetGrain<IUser>(userinfo[i].Key);
-                        await user.LeaveChannelByKey(guid);
-                    }
-
-                    //just incase there are users not in registry --logged out
                     await channel.ClearMembers();
                 }
             }

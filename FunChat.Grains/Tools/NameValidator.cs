@@ -9,7 +9,7 @@ namespace FunChat.Grains.Tools
         {
             this.name = name;
         }
-        const string match = "[A-Za-z0-9_]";
+        const string match = @"^[a-zA-Z0-9]+$";
         public bool IsValid(int minlength, int maxlength)
         {
             return minlength <= name.Length && name.Length <= maxlength && (new Regex(match).IsMatch(name));

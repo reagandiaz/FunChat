@@ -1,5 +1,6 @@
 ﻿using Orleans.Concurrency;
 using System;
+using System.Collections.Generic;
 
 namespace FunChat.GrainIntefaces
 {

@@ -9,7 +9,7 @@ namespace FunChat.Grains
     public class Channel : Orleans.Grain, IChannel
     {
         ChannelInfo channelinfo;
-        readonly List<string> members = new List<string>();
+        readonly Dictionary<string, Guid> members = new Dictionary<string, Guid>();
         readonly Queue<Message> messages = new Queue<Message>();
         const int buffer = 100;
         string password = string.Empty;
@@ -24,12 +24,19 @@ namespace FunChat.Grains
         {
             return await Task.FromResult(channelinfo.Name);
         }
-        public async Task<ChannelInfo> Join(string username, string password)
+        public async Task<ChannelInfo> Join(UserInfo userInfo, string password)
         {
             ChannelInfo channelinfo = new ChannelInfo() { Name = string.Empty, Key = Guid.Empty };
-            if (this.password == password && !members.Contains(username))
+            if (this.password == password)
             {
-                members.Add(username);
+                if (members.ContainsKey(userInfo.Name))
+                {
+                    if (members[userInfo.Name] != userInfo.Key)
+                        members[userInfo.Name] = userInfo.Key;
+                }
+                else
+                    members.Add(userInfo.Name, userInfo.Key);
+
                 channelinfo = new ChannelInfo() { Name = this.channelinfo.Name, Key = this.channelinfo.Key };
             }
             return await Task.FromResult(channelinfo);
@@ -37,19 +44,20 @@ namespace FunChat.Grains
         public async Task<ChannelInfo> Leave(string username)
         {
             ChannelInfo channelinfo = new ChannelInfo() { Name = string.Empty, Key = Guid.Empty };
-            if (members.Contains(username))
+            if (members.ContainsKey(username))
             {
                 members.Remove(username);
                 channelinfo = new ChannelInfo() { Name = this.channelinfo.Name, Key = this.channelinfo.Key };
             }
             return await Task.FromResult(channelinfo);
         }
-        public async Task<bool> Message(Message msg)
+        public async Task<bool> Message(UserInfo userinfo, Message msg)
         {
             bool iswritten = false;
-            if (members.Contains(msg.Author))
+            //validation
+            if (members.ContainsKey(userinfo.Name) && members[userinfo.Name] == userinfo.Key)
             {
-                msg.Channel = channelinfo.Name;
+                msg.Author = userinfo.Name;
                 if (messages.Count == buffer)
                     messages.Dequeue();
                 messages.Enqueue(msg);
@@ -60,11 +68,16 @@ namespace FunChat.Grains
 
         public async Task<string[]> GetMembers()
         {
-            return await Task.FromResult(members.ToArray());
+            return await Task.FromResult(members.Keys.ToArray());
         }
 
         public async Task ClearMembers()
         {
+            foreach (var item in members)
+            {
+                var user = this.GrainFactory.GetGrain<IUser>(item.Value);
+                await user.LeaveChannelByKey(this.channelinfo.Key);
+            }
             members.Clear();
             await Task.CompletedTask;
         }
@@ -78,6 +91,19 @@ namespace FunChat.Grains
                 response = messages.Skip(messages.Count - numberOfMessages).ToArray();
 
             return Task.FromResult(response);
+        }
+
+        public async Task<ChannelInfo> UpdateUserInfo(UserInfo userInfo)
+        {
+            ChannelInfo channelinfo = new ChannelInfo() { Name = string.Empty, Key = Guid.Empty };
+            if (members.ContainsKey(userInfo.Name))
+            {
+                if (members[userInfo.Name] != userInfo.Key)
+                    members[userInfo.Name] = userInfo.Key;
+
+                channelinfo = new ChannelInfo() { Name = this.channelinfo.Name, Key = this.channelinfo.Key };
+            }
+            return await Task.FromResult(channelinfo);
         }
     }
 }
