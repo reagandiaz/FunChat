@@ -182,17 +182,10 @@ namespace FunChat.Client
                         {
                             if (parameters.Length == 2)
                             {
-                                var guid = await user.LocateChannel(parameters[1]);
-                                if (guid != Guid.Empty)
-                                {
-                                    var channel = client.GetGrain<IChannel>(guid);
-                                    var members = await channel.GetMembers();
-                                    Console.WriteLine($"members count:{members.Length}");
-                                    for (int i = 0; i < members.Length; i++)
-                                        Console.WriteLine($"members[{i}]:{members[i]}");
-                                }
-                                else
-                                    Console.WriteLine($"members failed: channel {parameters[1]} not found");
+                                var members = await user.GetChannelMembers(parameters[1]);
+                                Console.WriteLine($"members count:{members.Length}");
+                                for (int i = 0; i < members.Length; i++)
+                                    Console.WriteLine($"members[{i}]:{members[i]}");
                             }
                             else
                                 Console.WriteLine("Invalid Parameters");

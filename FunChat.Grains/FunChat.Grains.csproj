@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <Compile Remove="HelloGrain.cs" />
+    <Compile Remove="UserRegistry.cs" />
   </ItemGroup>
 
   <ItemGroup>

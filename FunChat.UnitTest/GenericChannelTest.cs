@@ -52,13 +52,15 @@ namespace FunChat.UnitTest
         //I can send and receive messages in the generical channel (default channel). 
         //I can see the channel’s chat history(the last 100 messages)
 
+        const string generic = "generic";
+
         [Fact]
         public async Task SendAndGetMessageFromGenericChannel()
         {
             int amessages = 5;
             int bmessages = 5;
-            await SimulateSending("generic", "usera", amessages);
-            await SimulateSending("generic", "userb", bmessages);
+            await SimulateSending(generic, "usera", amessages);
+            await SimulateSending(generic, "userb", bmessages);
             int count = await SimulateRead();
             Assert.Equal(amessages + bmessages, count);
         }
@@ -69,8 +71,8 @@ namespace FunChat.UnitTest
         {
             var newuser = "userc";
             await Login(newuser);
-            await AssignChannel("generic");
-            var members = await channel.GetMembers();
+            await AssignChannel(generic);
+            var members = await user.GetChannelMembers(generic);
             Assert.True(members.Length >= 1);
         }
     }

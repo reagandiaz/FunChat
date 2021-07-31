@@ -27,7 +27,7 @@ namespace FunChat.Grains
                 userInfo = new UserInfo() { Name = username, Key = this.GetGrainIdentity().PrimaryKey };
                 isadmin = username == "Admin";
                 var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
-                
+
                 //update state
                 var membership = await channelregistry.UpdateMembership(userInfo);
                 for (int i = 0; i < membership.Length; i++)
@@ -139,7 +139,7 @@ namespace FunChat.Grains
         public async Task<string[]> GetChannelMembers(string channelname)
         {
             string[] members = Array.Empty<string>();
-            if (isadmin)
+            if (isadmin || currentchannel.Contains(channelname) || channelname == generic)
             {
                 var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
                 var guid = await channelregistry.GetChannel(channelname);

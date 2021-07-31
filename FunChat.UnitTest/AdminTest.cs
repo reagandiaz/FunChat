@@ -81,7 +81,6 @@ namespace FunChat.UnitTest
             Assert.True(channels.Length > 1);
         }
 
-
         [Fact]
         public async Task GetMembers()
         {
@@ -111,9 +110,7 @@ namespace FunChat.UnitTest
 
             await adminuser.RemoveChannel(channelinfo.Name);
 
-            var after = _cluster.GrainFactory.GetGrain<IChannel>(channelinfo.Key);
-
-            var newmembers = await after.GetMembers();
+            var newmembers = await adminuser.GetChannelMembers(channelinfo.Name);
 
             Assert.True(newmembers.Length == 0 && oldmembercount > 0);
         }

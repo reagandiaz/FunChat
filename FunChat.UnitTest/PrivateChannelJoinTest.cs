@@ -57,10 +57,15 @@ namespace FunChat.UnitTest
             for (int i = 0; i < channelcount; i++)
                 channelinfo = await user.JoinChannel(data[i].Name, password);
 
-            var channel = _cluster.GrainFactory.GetGrain<IChannel>(channelinfo.Key);
-            var oldmembers = await channel.GetMembers();
+            var oldmembers = await user.GetChannelMembers(channelinfo.Name);
             await user.LeaveChannelByName(channelinfo.Name);
-            var members = await channel.GetMembers();
+
+
+            var adminuser = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
+            await adminuser.Login(admin, admin);
+
+            var members = await adminuser.GetChannelMembers(channelinfo.Name);  
+
             Assert.True(oldmembers.Length > members.Length);
         }
 
@@ -70,6 +75,8 @@ namespace FunChat.UnitTest
         //I can left any channel other than the default channel
 
         const string password = "password";
+        const string admin = "Admin";
+        const string generic = "generic";
 
         [Fact]
         public async Task Join1ChannelValid()
@@ -97,10 +104,8 @@ namespace FunChat.UnitTest
             var subscriber = "userp";
             var user = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
             await user.Login(subscriber, subscriber);
-            var guid = await user.LocateChannel("generic");
-            var channel = _cluster.GrainFactory.GetGrain<IChannel>(guid);
-            await user.LeaveChannelByName("generic");
-            var members = await channel.GetMembers();
+            await user.LeaveChannelByName(generic);
+            var members = await user.GetChannelMembers(generic);
             bool t = members.Contains(subscriber);
             Assert.True(t);
         }
