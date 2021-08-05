@@ -16,157 +16,258 @@ namespace FunChat.Grains
         const int channelidlimit = 6;
         const string generic = "generic";
         const int maxchannel = 2;
+        const string admin = "Admin";
 
         readonly List<string> currentchannel = new List<string>();
 
-        public async Task<Guid> Login(string username, string password)
+        public async Task<UserInfoResult> Login(string username, string password)
         {
-            Guid guid = Guid.Empty;
-            if (username == password && (new NameValidator(username)).IsValid(loginlimit[0], loginlimit[1]))
+            UserInfoResult result = new UserInfoResult();
+            try
             {
-                userInfo = new UserInfo() { Name = username, Key = this.GetGrainIdentity().PrimaryKey };
-                isadmin = username == "Admin";
-                var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
-
-                //update state
-                var membership = await channelregistry.UpdateMembership(userInfo);
-                for (int i = 0; i < membership.Length; i++)
+                if (username == password && (new NameValidator(username)).IsValid(loginlimit[0], loginlimit[1]))
                 {
-                    if (membership[i].Name != generic)
-                        currentchannel.Add(membership[i].Name);
+                    userInfo = new UserInfo() { Name = username, Key = this.GetGrainIdentity().PrimaryKey };
+                    isadmin = username == admin;
+                    var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
+
+                    //update state
+                    var membershipresult = await channelregistry.UpdateMembership(userInfo);
+                    if (membershipresult.State == ResultState.Success)
+                    {
+                        for (int i = 0; i < membershipresult.Infos.Length; i++)
+                        {
+                            if (membershipresult.Infos[i].Name != generic)
+                                currentchannel.Add(membershipresult.Infos[i].Name);
+                        }
+                        //join generic chanel
+                        var joinresult = await JoinChannel(generic, String.Empty);
+                        if (joinresult.State == ResultState.Success)
+                        {
+                            result.State = ResultState.Success;
+                            result.Info = userInfo;
+                        }
+                    }
                 }
-                //join generic chanel
-                await JoinChannel(generic, String.Empty);
-
-                guid = userInfo.Key;
             }
-            return guid;
+            catch
+            {
+                result.State = ResultState.Error;
+            }
+            return result;
         }
 
-        public async Task<Guid> LocateChannel(string channel)
+        public async Task<CurrentChannelsResult> CurrentChannels()
         {
-            Guid guid = Guid.Empty;
-            if (userInfo != null)
+            CurrentChannelsResult result = new CurrentChannelsResult();
+            try
             {
-                var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(guid);
-                guid = (await channelregistry.GetChannel(channel));
+                if (userInfo != null)
+                {
+                    result.Items = currentchannel.ToArray();
+                    result.State = ResultState.Success;
+                }
             }
-            return guid;
-        }
-        public async Task<ChannelInfo> CreateChannel(string password)
-        {
-            Guid guid = Guid.Empty;
-            string channelname = string.Empty;
-            if (userInfo != null && (new NameValidator(password)).IsValid(channellimit[0], channellimit[1]))
+            catch
             {
-                var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
-
-                channelname = Guid.NewGuid().ToString("n").Substring(0, channelidlimit);
-
-                guid = (await channelregistry.Add(channelname, password));
+                result.State = ResultState.Error;
             }
-            return new ChannelInfo() { Key = guid, Name = channelname };
+            return await Task.FromResult(result);
         }
 
-
-        public async Task<ChannelInfo> JoinChannel(string channel, string password)
+        public async Task<ChannelInfoResult> LocateChannel(string channel)
         {
-            ChannelInfo channelInfo = new ChannelInfo() { Key = Guid.Empty, Name = string.Empty };
-            if (userInfo != null)
+            ChannelInfoResult result = new ChannelInfoResult();
+            try
             {
-                if (channel == generic || (currentchannel.Count < maxchannel && (new NameValidator(channel)).IsValid(channellimit[0], channellimit[1])))
+                if (userInfo != null)
                 {
                     var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
-                    var guid = (await channelregistry.GetChannel(channel));
-                    var cchannel = this.GrainFactory.GetGrain<IChannel>(guid);
-                    channelInfo = await cchannel.Join(userInfo, password);
-                    //iterate if not generic
-                    if (channelInfo.Name != generic && channelInfo.Name != String.Empty)
+                    result = await channelregistry.GetChannel(channel);
+                }
+            }
+            catch
+            {
+                result.State = ResultState.Error;
+            }
+            return result;
+        }
+
+        public async Task<ChannelInfoResult> CreateChannel(string password)
+        {
+            ChannelInfoResult result = new ChannelInfoResult();
+            try
+            {
+                if (userInfo != null && (new NameValidator(password)).IsValid(channellimit[0], channellimit[1]))
+                {
+                    var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
+                    var channelname = Guid.NewGuid().ToString("n").Substring(0, channelidlimit);
+                    result = (await channelregistry.Add(channelname, password));
+                }
+            }
+            catch
+            {
+                result.State = ResultState.Error;
+            }
+            return result;
+        }
+
+        public async Task<ChannelInfoResult> JoinChannel(string channel, string password)
+        {
+            ChannelInfoResult result = new ChannelInfoResult();
+            try
+            {
+                if (userInfo != null)
+                {
+                    if (channel == generic || (currentchannel.Count < maxchannel && (new NameValidator(channel)).IsValid(channellimit[0], channellimit[1])))
                     {
-                        if (!currentchannel.Contains(channelInfo.Name))
-                            currentchannel.Add(channelInfo.Name);
+                        var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
+                        result = (await channelregistry.GetChannel(channel));
+                        //check if found in registry
+                        if (result.State == ResultState.Success && result.Info.Key != Guid.Empty)
+                        {
+                            var cchannel = this.GrainFactory.GetGrain<IChannel>(result.Info.Key);
+                            result = await cchannel.Join(userInfo, password);
+                            //join suceess
+                            if (result.State == ResultState.Success)
+                            {
+                                //iterate if not generic
+                                if (result.Info.Name != generic && result.Info.Name != String.Empty)
+                                {
+                                    if (!currentchannel.Contains(result.Info.Name))
+                                        currentchannel.Add(result.Info.Name);
+                                }
+                            }
+                        }
+                        else
+                            result.State = ResultState.Failed;
                     }
                 }
             }
-            return channelInfo;
-        }
-
-        public async Task<ChannelInfo> LeaveChannelByName(string channel)
-        {
-            ChannelInfo channelInfo = new ChannelInfo() { Key = Guid.Empty, Name = string.Empty };
-            if (userInfo != null)
+            catch
             {
-                var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
-                var guid = await channelregistry.GetChannel(channel);
-
-                if (guid != Guid.Empty)
-                    channelInfo = await this.LeaveChannelByKey(guid);
+                result.State = ResultState.Error;
             }
-            return channelInfo;
+            return result;
         }
 
-        public async Task<ChannelInfo> LeaveChannelByKey(Guid channelguid)
+        public async Task<ChannelInfoResult> LeaveChannelByName(string channel)
         {
-            ChannelInfo channelInfo = new ChannelInfo() { Key = Guid.Empty, Name = string.Empty };
-            if (userInfo != null)
+            ChannelInfoResult result = new ChannelInfoResult();
+            try
             {
-                var channel = this.GrainFactory.GetGrain<IChannel>(channelguid);
-                //cannot leave default channel
-                if (await channel.Name() != generic)
+                if (userInfo != null)
                 {
-                    channelInfo = await channel.Leave(userInfo.Name);
-                    if (channelInfo.Name != String.Empty)
+                    var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
+                    result = await channelregistry.GetChannel(channel);
+
+                    if (result.State == ResultState.Success && result.Info.Key != Guid.Empty)
+                        result = await this.LeaveChannelByKey(result.Info.Key);
+                    else
+                        result.State = ResultState.Failed;
+                }
+            }
+            catch
+            {
+                result.State = ResultState.Error;
+            }
+            return result;
+        }
+
+        public async Task<ChannelInfoResult> LeaveChannelByKey(Guid channelguid)
+        {
+            ChannelInfoResult result = new ChannelInfoResult();
+            try
+            {
+                if (userInfo != null)
+                {
+                    var channel = this.GrainFactory.GetGrain<IChannel>(channelguid);
+                    //cannot leave default channel
+                    if (await channel.Name() != generic)
                     {
-                        if (currentchannel.Contains(channelInfo.Name))
-                            currentchannel.Remove(channelInfo.Name);
+                        result = await channel.Leave(userInfo.Name);
+                        if (result.State == ResultState.Success && result.Info.Name != String.Empty)
+                        {
+                            if (currentchannel.Contains(result.Info.Name))
+                                currentchannel.Remove(result.Info.Name);
+                        }
                     }
                 }
             }
-            return channelInfo;
-        }
-
-        public async Task<ChannelInfo[]> GetAllChannels()
-        {
-            ChannelInfo[] channelinfo = Array.Empty<ChannelInfo>();
-            if (isadmin)
+            catch
             {
-                var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
-                channelinfo = await channelregistry.GetAllChannels();
+                result.State = ResultState.Error;
             }
-            return channelinfo;
+            return result;
         }
 
-        public async Task<string[]> GetChannelMembers(string channelname)
+        public async Task<ChannelInfoListResult> GetAllChannels()
         {
-            string[] members = Array.Empty<string>();
-            if (isadmin || currentchannel.Contains(channelname) || channelname == generic)
+            ChannelInfoListResult result = new ChannelInfoListResult();
+            try
             {
-                var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
-                var guid = await channelregistry.GetChannel(channelname);
-                if (guid != Guid.Empty)
+                if (isadmin)
                 {
-                    var channel = this.GrainFactory.GetGrain<IChannel>(guid);
-                    members = await channel.GetMembers();
+                    var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
+                    result = await channelregistry.GetAllChannels();
+                }
+                else
+                    result.State = ResultState.Failed;
+            }
+            catch
+            {
+                result.State = ResultState.Error;
+            }
+            return result;
+        }
+
+        public async Task<MembersResult> GetChannelMembers(string channelname)
+        {
+            MembersResult result = new MembersResult();
+            try
+            {
+                if (isadmin || currentchannel.Contains(channelname) || channelname == generic)
+                {
+                    var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
+                    var channelInfoResult = await channelregistry.GetChannel(channelname);
+                    if (channelInfoResult.State == ResultState.Success)
+                    {
+                        if (channelInfoResult.Info.Key != Guid.Empty)
+                        {
+                            var channel = this.GrainFactory.GetGrain<IChannel>(channelInfoResult.Info.Key);
+                            result = await channel.GetMembers();
+                        }
+                    }
                 }
             }
-            return members;
+            catch
+            {
+                result.State = ResultState.Error;
+            }
+            return result;
         }
 
-
-        public async Task<Guid> RemoveChannel(string channelname)
+        public async Task<ChannelInfoResult> RemoveChannel(string channelname)
         {
-            Guid guid = Guid.Empty;
-            if (isadmin)
+            ChannelInfoResult result = new ChannelInfoResult();
+            try
             {
-                var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
-                guid = await channelregistry.Remove(channelname);
-                if (guid != Guid.Empty)
+                if (isadmin)
                 {
-                    var channel = this.GrainFactory.GetGrain<IChannel>(guid);
-                    await channel.ClearMembers();
+                    var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
+                    result = await channelregistry.Remove(channelname);
+                    if (result.State == ResultState.Success)
+                    {
+                        var channel = this.GrainFactory.GetGrain<IChannel>(result.Info.Key);
+                        await channel.ClearMembers();
+                    }
                 }
             }
-            return guid;
+            catch
+            {
+                result.State = ResultState.Error;
+            }
+            return result;
         }
     }
 }

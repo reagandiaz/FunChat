@@ -2,8 +2,8 @@
 using Orleans;
 using Orleans.Configuration;
 using Orleans.Hosting;
+using Orleans.Streams;
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace FunChat.Client
@@ -14,7 +14,6 @@ namespace FunChat.Client
         {
             return RunMainAsync().Result;
         }
-
         private static async Task<int> RunMainAsync()
         {
             try
@@ -36,12 +35,12 @@ namespace FunChat.Client
                 return 1;
             }
         }
-
         private static async Task<IClusterClient> ConnectClient()
         {
             IClusterClient client;
             client = new ClientBuilder()
                 .UseLocalhostClustering()
+                .AddSimpleMessageStreamProvider("FunChat")
                 .Configure<ClusterOptions>(options =>
                 {
                     options.ClusterId = "dev";
@@ -53,32 +52,204 @@ namespace FunChat.Client
             Console.WriteLine("Client successfully connected to silo host \n");
             return client;
         }
+        public static async Task UpdateChannelSubscription(ClientState clientstate, string channelname)
+        {
+            var channelresult = await clientstate.User.LocateChannel(channelname);
+            if (channelresult.State == ResultState.Success)
+            {
+                var channel = clientstate.Client.GetGrain<IChannel>(channelresult.Info.Key);
+                var subscription = await Subscribe(clientstate.Client, channelresult.Info.Key, channelname);
+                if (subscription != null)
+                {
+                    clientstate.Subscriptions.Add(channelname, subscription);
+                    clientstate.Channels.Add(channelname, channel);
+                }
+                else
+                    Console.WriteLine("failed subscription");
+            }
+            else
+                Console.WriteLine($"can't find generic channel");
+        }
+        private static async Task<StreamSubscriptionHandle<Message>> Subscribe(IClusterClient client, Guid channelguid, string channelname)
+        {
+            StreamSubscriptionHandle<Message> handler = null;
+            var stream = client.GetStreamProvider("FunChat").GetStream<Message>(channelguid, channelname);
+            if (stream != null)
+                handler = await stream.SubscribeAsync(new ChannelObserver(channelname));
+            return handler;
+        } 
+        private static async Task Login(ClientState clientstate, string user, string password)
+        {
+            const string generic = "generic";
 
+            await clientstate.Clear();
+
+            clientstate.User = clientstate.Client.GetGrain<IUser>(Guid.NewGuid());
+
+            var loginresult = await clientstate.User.Login(user, password);
+
+            if (loginresult.State == ResultState.Success)
+            {
+                clientstate.Key = loginresult.Info.Key;
+                Console.WriteLine($"login success: {clientstate.Key}");
+                clientstate.UserName = user;
+
+                await UpdateChannelSubscription(clientstate, generic);
+                var result = await clientstate.User.CurrentChannels();
+                if (result.State == ResultState.Success)
+                {
+                    for (int i = 0; i < result.Items.Length; i++)
+                        await UpdateChannelSubscription(clientstate, result.Items[i]);
+                }
+            }
+            else
+                Console.WriteLine($"login {loginresult.State}!");
+        }
+        private static async Task Join(ClientState clientstate, string channelname, string password)
+        {
+            if (clientstate.User != null)
+            {
+                var channelinforesult = await clientstate.User.JoinChannel(channelname, password);
+                if (channelinforesult.State == ResultState.Success)
+                {
+                    //remove old handle
+                    if (clientstate.Channels.ContainsKey(channelinforesult.Info.Name))
+                    {
+                        clientstate.Channels.Remove(channelinforesult.Info.Name);
+                        if (clientstate.Subscriptions.ContainsKey(channelinforesult.Info.Name))
+                        {
+                            await clientstate.Subscriptions[channelinforesult.Info.Name].UnsubscribeAsync();
+                            clientstate.Subscriptions.Remove(channelinforesult.Info.Name);
+                        }
+                    }
+
+                    clientstate.Channels.Add(channelinforesult.Info.Name, clientstate.Client.GetGrain<IChannel>(channelinforesult.Info.Key));
+                    var subscription = await Subscribe(clientstate.Client, channelinforesult.Info.Key, channelinforesult.Info.Name);
+                    if (subscription != null)
+                    {
+                        clientstate.Subscriptions.Add(channelinforesult.Info.Name, subscription);
+                        Console.WriteLine($"join success: {channelinforesult.Info.Name}");
+                    }
+                    else
+                        Console.WriteLine($"join failed subscription : {channelname}");
+                }
+                else
+                    Console.WriteLine($"join failed: {channelname}");
+            }
+            else
+                Console.WriteLine("user null: please login");
+        }
+        private static async Task Message(ClientState clientstate, string channelname, string message)
+        {
+            clientstate.Channels.TryGetValue(channelname, out IChannel ichannel);
+            if (ichannel != null)
+            {
+                bool success = await ichannel.Message(new UserInfo() { Name = clientstate.UserName, Key = clientstate.Key }, new Message(message));
+                if (success)
+                    Console.WriteLine($"message success:{message}");
+                else
+                    Console.WriteLine($"message failed:{message}");
+            }
+            else
+                Console.WriteLine($"message failed: please join {channelname}");
+
+        }
+        private static async Task Read(ClientState clientstate, string channelname)
+        {
+            clientstate.Channels.TryGetValue(channelname, out IChannel ichannel);
+            if (ichannel != null)
+            {
+                var result = await ichannel.ReadHistory();
+                if (result.State == ResultState.Success)
+                {
+                    Console.WriteLine($"read count:{result.Messages.Length}");
+                    for (int i = 0; i < result.Messages.Length; i++)
+                        Console.WriteLine($"read[{i}]:{result.Messages[i].Author} : {result.Messages[i].Text}");
+                }
+                else
+                    Console.WriteLine($"read failed { channelname }");
+            }
+            else
+                Console.WriteLine($"read failed: please join {channelname}");
+        }
+        private static async Task Create(ClientState clientstate, string password)
+        {
+            var result = await clientstate.User.CreateChannel(password);
+            if (result.State == ResultState.Success)
+                Console.WriteLine($"create {result.State}: channel:{result.Info.Name} password:{password}");
+            else
+                Console.WriteLine($"create {result.State} {password}");
+        }
+        private static async Task Members(ClientState clientstate, string channelname)
+        {
+            var members = await clientstate.User.GetChannelMembers(channelname);
+            if (members.State == ResultState.Success)
+            {
+                Console.WriteLine($"members count:{members.Items.Length}");
+                for (int i = 0; i < members.Items.Length; i++)
+                    Console.WriteLine($"members[{i}]:{members.Items[i]}");
+            }
+            else
+                Console.WriteLine($"members failed: please join {channelname}");
+        }
+        private static async Task Leave(ClientState clientstate, string channelname)
+        {
+            if (clientstate.User != null)
+            {
+                var result = await clientstate.User.LeaveChannelByName(channelname);
+                if (result.State == ResultState.Success)
+                {
+                    Console.WriteLine($"leave success: {result.Info.Name}");
+                    clientstate.Subscriptions.Remove(result.Info.Name);
+                    clientstate.Channels.Remove(result.Info.Name);
+                }
+                else
+                    Console.WriteLine($"leave failed: {channelname}");
+            }
+            else
+                Console.WriteLine("user null: please login");
+        }
+        private static async Task Channels(ClientState clientstate)
+        {
+            if (clientstate.User != null)
+            {
+                var result = await clientstate.User.GetAllChannels();
+                if (result.State == ResultState.Success)
+                {
+                    Console.WriteLine($"channels count:{result.Infos.Length}");
+                    for (int i = 0; i < result.Infos.Length; i++)
+                        Console.WriteLine($"channels[{i}]:{result.Infos[i].Name}");
+                }
+                else
+                    Console.WriteLine("channels failed");
+
+            }
+            else
+                Console.WriteLine("user null: please login");
+        }
+        private static async Task Delete(ClientState clientstate, string channelname)
+        {
+            if (clientstate.User != null)
+            {
+                var result = await clientstate.User.RemoveChannel(channelname);
+                if (result.State == ResultState.Success)
+                {
+                    clientstate.Channels.Remove(result.Info.Name);
+                    Console.WriteLine($"delete success: {result.Info.Name}");
+                }
+                else
+                    Console.WriteLine($"delete failed: {channelname}");
+            }
+            else
+                Console.WriteLine("user null: please login");
+        }
         private static async Task DoClientWork(IClusterClient client)
         {
             string input;
+            Console.WriteLine("please type /help");
 
-            Console.WriteLine("/login [user] [password]");
-            Console.WriteLine("/join [channel] [password]");
-            Console.WriteLine("/message [channel] [message]");
-            Console.WriteLine("/read [channel] [100max]");
-            Console.WriteLine("/members [channel]");
-            Console.WriteLine("/create [password]");
-            Console.WriteLine("/leave [channel]");
-            Console.WriteLine("/channels");
-            Console.WriteLine("/delete [channel]");
-            Console.WriteLine("/exit");
-            Console.WriteLine("\n");
-
-
-            IUser user = null;
-            string username = string.Empty;
-            Guid userguid = Guid.Empty;
-            Dictionary<string, IChannel> channels = new Dictionary<string, IChannel>();
-            const string generic = "generic";
-
+            ClientState clientState = new ClientState() { Client = client };
             bool end = false;
-
 
             do
             {
@@ -88,26 +259,35 @@ namespace FunChat.Client
 
                 switch (parameters[0])
                 {
+                    case "/help":
+                        {
+                            Console.WriteLine("\n");
+                            Console.WriteLine("/login [user] [password]");
+                            Console.WriteLine("/join [channel] [password]");
+                            Console.WriteLine("/message [channel] [message]");
+                            Console.WriteLine("/read [channel]");
+                            Console.WriteLine("/create [password]");
+                            Console.WriteLine("/members [channel]");
+                            Console.WriteLine("/leave [channel]");
+                            Console.WriteLine("/channels");
+                            Console.WriteLine("/delete [channel]");
+                            Console.WriteLine("/exit");
+                            Console.WriteLine("\n");
+                        }
+                        break;
                     case "/login":
                         {
                             if (parameters.Length == 3)
                             {
-                                user = client.GetGrain<IUser>(Guid.NewGuid());
-
-                                userguid = await user.Login(parameters[1], parameters[2]);
-
-                                if (userguid != Guid.Empty)
+                                try
                                 {
-                                    Console.WriteLine($"login success: {userguid}");
-                                    username = parameters[1];
-                                    var channelguid = await user.LocateChannel(generic);
-                                    var channel = client.GetGrain<IChannel>(channelguid);
-                                    channels.Clear();
-                                    channels.Add(generic, channel);
+                                    await Login(clientState, parameters[1], parameters[2]);
                                 }
-                                else
-                                    Console.WriteLine("login failed!");
-
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine(ex.Message);
+                                    Console.WriteLine(ex.StackTrace);
+                                }
                             }
                             else
                                 Console.WriteLine("Invalid Parameters");
@@ -117,67 +297,71 @@ namespace FunChat.Client
                         {
                             if (parameters.Length == 3)
                             {
-                                if (user != null)
+                                try
                                 {
-                                    ChannelInfo channel;
-
-                                    if (parameters[1] == "generic")
-                                        channel = await user.JoinChannel(parameters[1], string.Empty);
-                                    else
-                                        channel = await user.JoinChannel(parameters[1], parameters[2]);
-
-                                    if (channel.Name == parameters[1])
-                                    {
-                                        Console.WriteLine($"join success: {channel.Name}");
-
-                                        if (!channels.ContainsKey(channel.Name))
-                                            channels.Add(channel.Name, client.GetGrain<IChannel>(channel.Key));
-                                    }
-                                    else
-                                        Console.WriteLine($"join failed: {parameters[1]}");
+                                    await Join(clientState, parameters[1], parameters[2]);
                                 }
-                                else
-                                    Console.WriteLine("user null: please login");
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine(ex.Message);
+                                    Console.WriteLine(ex.StackTrace);
+                                }
                             }
                             else
                                 Console.WriteLine("Invalid Parameters");
-
                         }
                         break;
                     case "/message":
                         {
                             if (parameters.Length >= 3)
                             {
-                                channels.TryGetValue(parameters[1], out IChannel ichannel);
-                                if (ichannel != null)
+                                var offset = parameters[0].Length + parameters[1].Length + 2;
+                                var message = input[offset..];
+                                try
                                 {
-                                    var offset = parameters[0].Length + parameters[1].Length + 2;
-
-                                    var message = input[offset..];
-
-                                    bool success = await ichannel.Message(new UserInfo() { Name = username, Key = userguid }, new Message(message));
-                                    if (success)
-                                        Console.WriteLine($"message success:{message}");
-                                    else
-                                        Console.WriteLine($"message failed:{message}");
+                                    await Message(clientState, parameters[1], message);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine(ex.Message);
+                                    Console.WriteLine(ex.StackTrace);
                                 }
                             }
                             else
                                 Console.WriteLine("Invalid Parameters");
-
                         }
                         break;
+
                     case "/read":
                         {
-                            if (parameters.Length == 3 && int.TryParse(parameters[2], out int result))
+                            if (parameters.Length == 2)
                             {
-                                channels.TryGetValue(parameters[1], out IChannel ichannel);
-                                if (ichannel != null)
+                                try
                                 {
-                                    var messages = await ichannel.ReadHistory(result);
-                                    Console.WriteLine($"read count:{messages.Length}");
-                                    for (int i = 0; i < messages.Length; i++)
-                                        Console.WriteLine($"read[{i}]:{messages[i].Author} : {messages[i].Text}");
+                                    await Read(clientState, parameters[1]);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine(ex.Message);
+                                    Console.WriteLine(ex.StackTrace);
+                                }
+                            }
+                            else
+                                Console.WriteLine("Invalid Parameters");
+                        }
+                        break;
+                    case "/create":
+                        {
+                            if (parameters.Length == 2)
+                            {
+                                try
+                                {
+                                    await Create(clientState, parameters[1]);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine(ex.Message);
+                                    Console.WriteLine(ex.StackTrace);
                                 }
                             }
                             else
@@ -188,24 +372,15 @@ namespace FunChat.Client
                         {
                             if (parameters.Length == 2)
                             {
-                                var members = await user.GetChannelMembers(parameters[1]);
-                                Console.WriteLine($"members count:{members.Length}");
-                                for (int i = 0; i < members.Length; i++)
-                                    Console.WriteLine($"members[{i}]:{members[i]}");
-                            }
-                            else
-                                Console.WriteLine("Invalid Parameters");
-                        }
-                        break;
-                    case "/create":
-                        {
-                            if (parameters.Length == 2)
-                            {
-                                var channelinfo = await user.CreateChannel(parameters[1]);
-                                if (channelinfo.Key != Guid.Empty)
-                                    Console.WriteLine($"create success: channel:{channelinfo.Name} password:{parameters[1]}");
-                                else
-                                    Console.WriteLine($"create failed: {parameters[1]}");
+                                try
+                                {
+                                    await Members(clientState, parameters[1]);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine(ex.Message);
+                                    Console.WriteLine(ex.StackTrace);
+                                }
                             }
                             else
                                 Console.WriteLine("Invalid Parameters");
@@ -215,19 +390,15 @@ namespace FunChat.Client
                         {
                             if (parameters.Length == 2)
                             {
-                                if (user != null)
+                                try
                                 {
-                                    var channelinfo = await user.LeaveChannelByName(parameters[1]);
-                                    if (channelinfo.Key != Guid.Empty)
-                                    {
-                                        Console.WriteLine($"leave success: {parameters[1]}");
-                                        channels.Remove(parameters[1]);
-                                    }
-                                    else
-                                        Console.WriteLine($"leave failed: {parameters[1]}");
+                                    await Leave(clientState, parameters[1]);
                                 }
-                                else
-                                    Console.WriteLine("user null: please login");
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine(ex.Message);
+                                    Console.WriteLine(ex.StackTrace);
+                                }
                             }
                             else
                                 Console.WriteLine("Invalid Parameters");
@@ -237,44 +408,38 @@ namespace FunChat.Client
                         {
                             if (parameters.Length == 1)
                             {
-                                if (user != null)
+                                try
                                 {
-                                    var channelinfos = await user.GetAllChannels();
-                                    Console.WriteLine($"channels count:{channelinfos.Length}");
-                                    for (int i = 0; i < channelinfos.Length; i++)
-                                        Console.WriteLine($"channels[{i}]:{channelinfos[i].Name}");
+                                    await Channels(clientState);
                                 }
-                                else
-                                    Console.WriteLine("user null: please login");
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine(ex.Message);
+                                    Console.WriteLine(ex.StackTrace);
+                                }
                             }
                             else
                                 Console.WriteLine("Invalid Parameters");
                         }
                         break;
-
                     case "/delete":
                         {
                             if (parameters.Length == 2)
                             {
-                                if (user != null)
+                                try
                                 {
-                                    var guid = await user.RemoveChannel(parameters[1]);
-                                    if (guid != Guid.Empty)
-                                    {
-                                        channels.Remove(parameters[1]);
-                                        Console.WriteLine($"delete success: {parameters[1]}");
-                                    }
-                                    else
-                                        Console.WriteLine($"delete failed: {parameters[1]}");
+                                    await Delete(clientState, parameters[1]);
                                 }
-                                else
-                                    Console.WriteLine("user null: please login");
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine(ex.Message);
+                                    Console.WriteLine(ex.StackTrace);
+                                }
                             }
                             else
                                 Console.WriteLine("Invalid Parameters");
                         }
                         break;
-
                     case "/exit":
                         {
                             end = true;

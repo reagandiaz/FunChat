@@ -4,11 +4,11 @@ using System.Threading.Tasks;
 namespace FunChat.GrainIntefaces
 {
     public interface IChannelRegistry : Orleans.IGrainWithGuidKey
-    {
-        Task<Guid> Add(string name, string password);
-        Task<Guid> GetChannel(string name);
-        Task<ChannelInfo[]> GetAllChannels();
-        Task<Guid> Remove(string name);
-        Task<ChannelInfo[]> UpdateMembership(UserInfo userinfo);
+    {  
+        Task<ChannelInfoResult> Add(string name, string password);
+        Task<ChannelInfoResult> GetChannel(string name);
+        Task<ChannelInfoListResult> GetAllChannels();
+        Task<ChannelInfoResult> Remove(string name);
+        Task<ChannelInfoListResult> UpdateMembership(UserInfo userinfo);
     }
 }

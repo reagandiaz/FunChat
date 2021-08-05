@@ -44,6 +44,7 @@ namespace FunChat.Silo
                     options.ClusterId = "dev";
                     options.ServiceId = "OrleansBasics";
                 })
+                .AddSimpleMessageStreamProvider("FunChat")
                 .ConfigureLogging(logging => logging.AddConsole())
                 .AddMemoryGrainStorage("PubSubStore");
 

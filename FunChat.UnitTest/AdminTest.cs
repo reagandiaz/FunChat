@@ -22,14 +22,15 @@ namespace FunChat.UnitTest
         internal async Task Login(string username, string password, bool isvalid)
         {
             var user = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
-            Guid guid = Guid.Empty;
+            UserInfoResult result = new UserInfoResult();
+
             if (user != null)
-                guid = await user.Login(username, password);
+                result = await user.Login(username, password);
 
             if (isvalid)
-                Assert.True(guid != Guid.Empty);
+                Assert.True(result.State == ResultState.Success);
             else
-                Assert.True(guid == Guid.Empty);
+                Assert.True(result.State == ResultState.Failed);
         }
 
         const string password = "password";
@@ -39,9 +40,16 @@ namespace FunChat.UnitTest
         {
             List<ChannelInfo> channelinfo = new List<ChannelInfo>();
             var user = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
-            await user.Login(username, username);
-            for (int i = 0; i < channelcount; i++)
-                channelinfo.Add(await user.CreateChannel(password));
+            var result = await user.Login(username, username);
+            if (result.State == ResultState.Success)
+            {
+                for (int i = 0; i < channelcount; i++)
+                {
+                    var cresult = await user.CreateChannel(password);
+                    if (cresult.State == ResultState.Success)
+                        channelinfo.Add(cresult.Info);
+                }
+            }
             return channelinfo.ToArray();
         }
 
@@ -50,10 +58,14 @@ namespace FunChat.UnitTest
             var data = await CreateChannels(creator, channelcount);
             var user = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
             await user.Login(subscriber, subscriber);
-            ChannelInfo channelinfo = new ChannelInfo();
+            ChannelInfoResult channelinfo = new ChannelInfoResult();
             for (int i = 0; i < channelcount; i++)
-                channelinfo = await user.JoinChannel(data[i].Name, password);
-            return channelinfo;
+            {
+                var cinfo = await user.JoinChannel(data[i].Name, password);
+                if (cinfo.State == ResultState.Success)
+                    channelinfo = cinfo;
+            }
+            return channelinfo.Info;
         }
 
         //I can login to FunChat just like a normal user, if the login name is “Admin”, it will be an admin account.
@@ -76,9 +88,9 @@ namespace FunChat.UnitTest
             var adminuser = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
             await adminuser.Login(admin, admin);
 
-            var channels = await adminuser.GetAllChannels();
+            var result = await adminuser.GetAllChannels();
 
-            Assert.True(channels.Length > 1);
+            Assert.True(result.Infos.Length > 1);
         }
 
         [Fact]
@@ -90,9 +102,9 @@ namespace FunChat.UnitTest
             var adminuser = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
             await adminuser.Login(admin, admin);
 
-            var members = await adminuser.GetChannelMembers(channel.Name);
+            var result = await adminuser.GetChannelMembers(channel.Name);
 
-            Assert.True(members.Length > 0);
+            Assert.True(result.Items.Length > 0);
         }
 
         [Fact]
@@ -106,13 +118,15 @@ namespace FunChat.UnitTest
 
             var members = await adminuser.GetChannelMembers(channelinfo.Name);
 
-            var oldmembercount = members.Length;
+            var oldmembercount = members.Items.Length;
 
             await adminuser.RemoveChannel(channelinfo.Name);
 
             var newmembers = await adminuser.GetChannelMembers(channelinfo.Name);
 
-            Assert.True(newmembers.Length == 0 && oldmembercount > 0);
+            //should be failed since the channel is not in the registry
+
+            Assert.True(oldmembercount > 0 && newmembers.State == ResultState.Failed);
         }
     }
 }

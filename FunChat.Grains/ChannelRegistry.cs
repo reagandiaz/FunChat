@@ -16,72 +16,114 @@ namespace FunChat.Grains
         {
             Guid nguid = Guid.NewGuid();
             var gchannel = this.GrainFactory.GetGrain<IChannel>(nguid);
-            gchannel.SetChannelInfo(new ChannelInfo() { Key = nguid, Name = generic }, string.Empty);
+            gchannel.Initialize(new ChannelInfo() { Key = nguid, Name = generic }, string.Empty);
             activechannels.Add(generic, nguid);
             return base.OnActivateAsync();
         }
 
-        public async Task<Guid> Add(string name, string password)
+        public async Task<ChannelInfoResult> Add(string name, string password)
         {
-            Guid guid;
+            ChannelInfoResult result = new ChannelInfoResult();
+            try
+            {
+                Guid guid;
+
+                if (activechannels.ContainsKey(name))
+                {
+                    activechannels.TryGetValue(name, out guid);
+                    result.State = ResultState.Failed;
+                    result.Info = new ChannelInfo() { Key = guid, Name = name };
+                }
+                else
+                {
+                    var nguid = Guid.NewGuid();
+                    var nchannel = this.GrainFactory.GetGrain<IChannel>(nguid);
+                    await nchannel.Initialize(new ChannelInfo() { Key = nguid, Name = name }, password);
+                    activechannels.Add(name, nguid);
+
+                    result.State = ResultState.Success;
+                    result.Info = new ChannelInfo() { Key = guid, Name = name };
+                }
+            }
+            catch
+            {
+                result.State = ResultState.Error;
+            }
+            return result;
+        }
+
+        public async Task<ChannelInfoResult> GetChannel(string name)
+        {
+            ChannelInfoResult result = new ChannelInfoResult();
+
+            Guid guid = Guid.Empty;
             if (activechannels.ContainsKey(name))
                 activechannels.TryGetValue(name, out guid);
+
+            if (guid == Guid.Empty)
+                result.State = ResultState.Failed;
             else
             {
-                var nguid = Guid.NewGuid();
-                var nchannel = this.GrainFactory.GetGrain<IChannel>(nguid);
-                await nchannel.SetChannelInfo(new ChannelInfo() { Key = nguid, Name = name }, password);
-                activechannels.Add(name, nguid);
-                guid = nguid;
+                result.State = ResultState.Success;
+                result.Info = new ChannelInfo() { Key = guid, Name = name };
             }
-            return guid;
+
+            return await Task.FromResult(result);
         }
 
-        public async Task<Guid> GetChannel(string name)
+        public async Task<ChannelInfoListResult> GetAllChannels()
         {
-            Guid guid = Guid.Empty;
-            if (activechannels.ContainsKey(name))
-                activechannels.TryGetValue(name, out guid);
-            return await Task.FromResult(guid);
-        }
-
-        public async Task<ChannelInfo[]> GetAllChannels()
-        {
-            ChannelInfo[] info = Array.Empty<ChannelInfo>();
+            ChannelInfoListResult result = new ChannelInfoListResult();
             if (activechannels.Count > 0)
-                info = activechannels.Select(s => new ChannelInfo() { Key = s.Value, Name = s.Key }).ToArray();
-            return await Task.FromResult(info);
+                result.Infos = activechannels.Select(s => new ChannelInfo() { Key = s.Value, Name = s.Key }).ToArray();
+            result.State = ResultState.Success;
+            return await Task.FromResult(result);
         }
 
-        public async Task<Guid> Remove(string name)
+        public async Task<ChannelInfoResult> Remove(string name)
         {
-            Guid guid = Guid.Empty;
+            ChannelInfoResult result = new ChannelInfoResult();
             if (generic != name && activechannels.ContainsKey(name))
             {
-                activechannels.TryGetValue(name, out guid);
-                await Task.FromResult(activechannels.Remove(name));
+                activechannels.TryGetValue(name, out Guid guid);
+                if (guid != Guid.Empty)
+                {
+                    activechannels.Remove(name);
+                    result.State = ResultState.Success;
+                    result.Info = new ChannelInfo() { Key = guid, Name = name };
+                }
             }
-            return guid;
+            return await Task.FromResult(result);
         }
 
-        public async Task<ChannelInfo[]> UpdateMembership(UserInfo userinfo)
+        public async Task<ChannelInfoListResult> UpdateMembership(UserInfo userinfo)
         {
-            List<ChannelInfo> channels = new List<ChannelInfo>();
-            const int maxchannel = 3;
-            int ctr = 0;
-            foreach (var item in activechannels)
+            ChannelInfoListResult result = new ChannelInfoListResult();
+            try
             {
-                var channel = this.GrainFactory.GetGrain<IChannel>(item.Value);
-                var channelinfo = await channel.UpdateUserInfo(userinfo);
-                if (channelinfo.Key != Guid.Empty)
+                List<ChannelInfo> channels = new List<ChannelInfo>();
+                const int maxchannel = 3;
+                int ctr = 0;
+                foreach (var item in activechannels)
                 {
-                    ctr++;
-                    channels.Add(channelinfo);
+                    var channel = this.GrainFactory.GetGrain<IChannel>(item.Value);
+                    var channelinforesult = await channel.UpdateUserInfo(userinfo);
+                    if (channelinforesult.State == ResultState.Success && channelinforesult.Info.Key != Guid.Empty)
+                    {
+                        ctr++;
+                        channels.Add(channelinforesult.Info);
+                    }
+                    if (ctr == maxchannel)
+                        break;
                 }
-                if (ctr == maxchannel)
-                    break;
+                result.State = ResultState.Success;
+                result.Infos = channels.ToArray();
             }
-            return channels.ToArray();
+            catch
+            {
+                result.State = ResultState.Error;
+            }
+            return result;
         }
     }
 }

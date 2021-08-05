@@ -1,4 +1,6 @@
-﻿using Orleans.Hosting;
+﻿using Microsoft.Extensions.Configuration;
+using Orleans;
+using Orleans.Hosting;
 using Orleans.TestingHost;
 using System;
 
@@ -12,6 +14,7 @@ namespace FunChat.UnitTest.Tools
             builder.Options.ServiceId = Guid.NewGuid().ToString();
 
             builder.AddSiloBuilderConfigurator<TestSiloConfigurations>();
+            builder.AddClientBuilderConfigurator<TestClientConfigurations>();
 
             var cluster = builder.Build();
 
@@ -33,6 +36,15 @@ namespace FunChat.UnitTest.Tools
         public void Configure(ISiloBuilder siloBuilder)
         {
             siloBuilder.AddMemoryGrainStorage("PubSubStore");
+            siloBuilder.AddSimpleMessageStreamProvider("FunChat");
         }
     }
+
+    public class TestClientConfigurations : IClientBuilderConfigurator
+    {
+        public void Configure(IConfiguration configuration, IClientBuilder clientBuilder)
+        {
+            clientBuilder.AddSimpleMessageStreamProvider("FunChat");
+        }
+    } 
 }
