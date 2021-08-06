@@ -25,9 +25,9 @@ namespace FunChat.UnitTest
             await user.Login(username, username);
             var channelinfo = await user.CreateChannel(channelpassword);
             if (isvalid)
-                Assert.True(channelinfo.State == ResultState.Success && (new NameValidator(channelinfo.Info.Name)).IsValid(6, 6));
+                Assert.True(channelinfo.Success == true && (new NameValidator(channelinfo.Info.Name)).IsValid(6, 6));
             else
-                Assert.True(channelinfo.State != ResultState.Success);
+                Assert.True(channelinfo.Success != true);
         }
 
         //I can create a private channel with a password.

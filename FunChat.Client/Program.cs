@@ -55,7 +55,7 @@ namespace FunChat.Client
         public static async Task UpdateChannelSubscription(ClientState clientstate, string channelname)
         {
             var channelresult = await clientstate.User.LocateChannel(channelname);
-            if (channelresult.State == ResultState.Success)
+            if (channelresult.Success == true)
             {
                 var channel = clientstate.Client.GetGrain<IChannel>(channelresult.Info.Key);
                 var subscription = await Subscribe(clientstate.Client, channelresult.Info.Key, channelname);
@@ -88,7 +88,7 @@ namespace FunChat.Client
 
             var loginresult = await clientstate.User.Login(user, password);
 
-            if (loginresult.State == ResultState.Success)
+            if (loginresult.Success == true)
             {
                 clientstate.Key = loginresult.Info.Key;
                 Console.WriteLine($"login success: {clientstate.Key}");
@@ -96,21 +96,21 @@ namespace FunChat.Client
 
                 await UpdateChannelSubscription(clientstate, generic);
                 var result = await clientstate.User.CurrentChannels();
-                if (result.State == ResultState.Success)
+                if (result.Success == true)
                 {
-                    for (int i = 0; i < result.Items.Length; i++)
-                        await UpdateChannelSubscription(clientstate, result.Items[i]);
+                    for (int i = 0; i < result.Info.Length; i++)
+                        await UpdateChannelSubscription(clientstate, result.Info[i]);
                 }
             }
             else
-                Console.WriteLine($"login {loginresult.State}!");
+                Console.WriteLine($"login {loginresult.Success}!");
         }
         private static async Task Join(ClientState clientstate, string channelname, string password)
         {
             if (clientstate.User != null)
             {
                 var channelinforesult = await clientstate.User.JoinChannel(channelname, password);
-                if (channelinforesult.State == ResultState.Success)
+                if (channelinforesult.Success == true)
                 {
                     //remove old handle
                     if (clientstate.Channels.ContainsKey(channelinforesult.Info.Name))
@@ -160,11 +160,11 @@ namespace FunChat.Client
             if (ichannel != null)
             {
                 var result = await ichannel.ReadHistory();
-                if (result.State == ResultState.Success)
+                if (result.Success == true)
                 {
-                    Console.WriteLine($"read count:{result.Messages.Length}");
-                    for (int i = 0; i < result.Messages.Length; i++)
-                        Console.WriteLine($"read[{i}]:{result.Messages[i].Author} : {result.Messages[i].Text}");
+                    Console.WriteLine($"read count:{result.Info.Length}");
+                    for (int i = 0; i < result.Info.Length; i++)
+                        Console.WriteLine($"read[{i}]:{result.Info[i].Author} : {result.Info[i].Text}");
                 }
                 else
                     Console.WriteLine($"read failed { channelname }");
@@ -175,19 +175,19 @@ namespace FunChat.Client
         private static async Task Create(ClientState clientstate, string password)
         {
             var result = await clientstate.User.CreateChannel(password);
-            if (result.State == ResultState.Success)
-                Console.WriteLine($"create {result.State}: channel:{result.Info.Name} password:{password}");
+            if (result.Success == true)
+                Console.WriteLine($"create {result.Success}: channel:{result.Info.Name} password:{password}");
             else
-                Console.WriteLine($"create {result.State} {password}");
+                Console.WriteLine($"create {result.Success} {password}");
         }
         private static async Task Members(ClientState clientstate, string channelname)
         {
             var members = await clientstate.User.GetChannelMembers(channelname);
-            if (members.State == ResultState.Success)
+            if (members.Success == true)
             {
-                Console.WriteLine($"members count:{members.Items.Length}");
-                for (int i = 0; i < members.Items.Length; i++)
-                    Console.WriteLine($"members[{i}]:{members.Items[i]}");
+                Console.WriteLine($"members count:{members.Info.Length}");
+                for (int i = 0; i < members.Info.Length; i++)
+                    Console.WriteLine($"members[{i}]:{members.Info[i]}");
             }
             else
                 Console.WriteLine($"members failed: please join {channelname}");
@@ -197,7 +197,7 @@ namespace FunChat.Client
             if (clientstate.User != null)
             {
                 var result = await clientstate.User.LeaveChannelByName(channelname);
-                if (result.State == ResultState.Success)
+                if (result.Success == true)
                 {
                     Console.WriteLine($"leave success: {result.Info.Name}");
                     clientstate.Subscriptions.Remove(result.Info.Name);
@@ -214,11 +214,11 @@ namespace FunChat.Client
             if (clientstate.User != null)
             {
                 var result = await clientstate.User.GetAllChannels();
-                if (result.State == ResultState.Success)
+                if (result.Success == true)
                 {
-                    Console.WriteLine($"channels count:{result.Infos.Length}");
-                    for (int i = 0; i < result.Infos.Length; i++)
-                        Console.WriteLine($"channels[{i}]:{result.Infos[i].Name}");
+                    Console.WriteLine($"channels count:{result.Info.Length}");
+                    for (int i = 0; i < result.Info.Length; i++)
+                        Console.WriteLine($"channels[{i}]:{result.Info[i].Name}");
                 }
                 else
                     Console.WriteLine("channels failed");
@@ -232,7 +232,7 @@ namespace FunChat.Client
             if (clientstate.User != null)
             {
                 var result = await clientstate.User.RemoveChannel(channelname);
-                if (result.State == ResultState.Success)
+                if (result.Success == true)
                 {
                     clientstate.Channels.Remove(result.Info.Name);
                     Console.WriteLine($"delete success: {result.Info.Name}");

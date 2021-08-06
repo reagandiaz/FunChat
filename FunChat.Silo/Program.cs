@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Threading.Tasks;
-using FunChat.Grains;
 using Microsoft.Extensions.Logging;
 using Orleans;
 using Orleans.Configuration;

@@ -22,15 +22,15 @@ namespace FunChat.UnitTest
         internal async Task Login(string username, string password, bool isvalid)
         {
             var user = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
-            UserInfoResult result = new UserInfoResult();
+            Result<UserInfo> result = new Result<UserInfo>();
 
             if (user != null)
                 result = await user.Login(username, password);
 
             if (isvalid)
-                Assert.True(result.State == ResultState.Success);
+                Assert.True(result.Success == true);
             else
-                Assert.True(result.State == ResultState.Failed);
+                Assert.True(result.Success == false);
         }
 
         const string password = "password";
@@ -41,12 +41,12 @@ namespace FunChat.UnitTest
             List<ChannelInfo> channelinfo = new List<ChannelInfo>();
             var user = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
             var result = await user.Login(username, username);
-            if (result.State == ResultState.Success)
+            if (result.Success == true)
             {
                 for (int i = 0; i < channelcount; i++)
                 {
                     var cresult = await user.CreateChannel(password);
-                    if (cresult.State == ResultState.Success)
+                    if (cresult.Success == true)
                         channelinfo.Add(cresult.Info);
                 }
             }
@@ -58,11 +58,11 @@ namespace FunChat.UnitTest
             var data = await CreateChannels(creator, channelcount);
             var user = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
             await user.Login(subscriber, subscriber);
-            ChannelInfoResult channelinfo = new ChannelInfoResult();
+            Result<ChannelInfo> channelinfo = new Result<ChannelInfo>();
             for (int i = 0; i < channelcount; i++)
             {
                 var cinfo = await user.JoinChannel(data[i].Name, password);
-                if (cinfo.State == ResultState.Success)
+                if (cinfo.Success == true)
                     channelinfo = cinfo;
             }
             return channelinfo.Info;
@@ -90,7 +90,7 @@ namespace FunChat.UnitTest
 
             var result = await adminuser.GetAllChannels();
 
-            Assert.True(result.Infos.Length > 1);
+            Assert.True(result.Info.Length > 1);
         }
 
         [Fact]
@@ -104,7 +104,7 @@ namespace FunChat.UnitTest
 
             var result = await adminuser.GetChannelMembers(channel.Name);
 
-            Assert.True(result.Items.Length > 0);
+            Assert.True(result.Info.Length > 0);
         }
 
         [Fact]
@@ -118,7 +118,7 @@ namespace FunChat.UnitTest
 
             var members = await adminuser.GetChannelMembers(channelinfo.Name);
 
-            var oldmembercount = members.Items.Length;
+            var oldmembercount = members.Info.Length;
 
             await adminuser.RemoveChannel(channelinfo.Name);
 
@@ -126,7 +126,7 @@ namespace FunChat.UnitTest
 
             //should be failed since the channel is not in the registry
 
-            Assert.True(oldmembercount > 0 && newmembers.State == ResultState.Failed);
+            Assert.True(oldmembercount > 0 && newmembers.Success == false);
         }
     }
 }

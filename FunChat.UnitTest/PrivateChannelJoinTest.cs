@@ -28,7 +28,7 @@ namespace FunChat.UnitTest
             for (int i = 0; i < channelcount; i++)
             {
                 var cresult = await user.CreateChannel(password);
-                if (cresult.State == ResultState.Success)
+                if (cresult.Success == true)
                     channelinfo.Add(cresult.Info);
             }
             return channelinfo.ToArray();
@@ -40,7 +40,7 @@ namespace FunChat.UnitTest
             var data = await CreateChannels(creator, channelcount);
             var user = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
             await user.Login(subscriber, subscriber);
-            ChannelInfoResult channelinfo = new ChannelInfoResult();
+            Result<ChannelInfo> channelinfo = new Result<ChannelInfo>();
             for (int i = 0; i < channelcount; i++)
             {
                 channelinfo = await user.JoinChannel(data[i].Name, password);
@@ -51,9 +51,9 @@ namespace FunChat.UnitTest
             var channels = await user.CurrentChannels();
 
             if (isvalid)
-                Assert.True(channelinfo.State == ResultState.Success && channels.Items.Length <= 2);
+                Assert.True(channelinfo.Success == true && channels.Info.Length <= 2);
             else
-                Assert.True(channelinfo.State == ResultState.Failed && channels.Items.Length == 2);
+                Assert.True(channelinfo.Success == false && channels.Info.Length == 2);
         }
 
 
@@ -63,7 +63,7 @@ namespace FunChat.UnitTest
             var data = await CreateChannels(creator, channelcount);
             var user = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
             await user.Login(subscriber, subscriber);
-            ChannelInfoResult channelinfo = new ChannelInfoResult();
+            Result<ChannelInfo> channelinfo = new Result<ChannelInfo>();
             for (int i = 0; i < channelcount; i++)
                 channelinfo = await user.JoinChannel(data[i].Name, password);
 
@@ -75,7 +75,7 @@ namespace FunChat.UnitTest
 
             var members = await adminuser.GetChannelMembers(channelinfo.Info.Name);
 
-            Assert.True(oldmembers.Items.Length > members.Items.Length);
+            Assert.True(oldmembers.Info.Length > members.Info.Length);
         }
 
 
@@ -115,7 +115,7 @@ namespace FunChat.UnitTest
             await user.Login(subscriber, subscriber);
             await user.LeaveChannelByName(generic);
             var members = await user.GetChannelMembers(generic);
-            Assert.True(members.State == ResultState.Success && members.Items.Contains(subscriber));
+            Assert.True(members.Success == true && members.Info.Contains(subscriber));
         }
     }
 }

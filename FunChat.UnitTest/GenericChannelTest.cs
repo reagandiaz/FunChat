@@ -26,7 +26,7 @@ namespace FunChat.UnitTest
         ChannelInfo channelinfo;
         MessageObserver observer;
 
-        internal async Task<UserInfoResult> Login(string username)
+        internal async Task<Result<UserInfo>> Login(string username)
         {
             user = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
             return await user.Login(username, username);
@@ -35,7 +35,7 @@ namespace FunChat.UnitTest
         internal async Task AssignChannel(string channelname)
         {
             var channelguid = await user.LocateChannel(channelname);
-            if (channelguid.State == ResultState.Success)
+            if (channelguid.Success == true)
             {
                 channel = _cluster.GrainFactory.GetGrain<IChannel>(channelguid.Info.Key);
                 channelinfo = new ChannelInfo() { Key = channelguid.Info.Key, Name = channelname };
@@ -71,7 +71,7 @@ namespace FunChat.UnitTest
         internal async Task<int> ReadFromChannel()
         {
             var messages = await channel.ReadHistory();
-            return await Task.FromResult(messages.Messages.Length);
+            return await Task.FromResult(messages.Info.Length);
         }
 
         //I can send and receive messages in the generical channel (default channel). 
@@ -106,7 +106,7 @@ namespace FunChat.UnitTest
             await Login(newuser);
             await AssignChannel(generic);
             var members = await user.GetChannelMembers(generic);
-            Assert.True(members.Items.Length >= 1);
+            Assert.True(members.Info.Length >= 1);
         }
     }
 }

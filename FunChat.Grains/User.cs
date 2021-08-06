@@ -20,9 +20,9 @@ namespace FunChat.Grains
 
         readonly List<string> currentchannel = new List<string>();
 
-        public async Task<UserInfoResult> Login(string username, string password)
+        public async Task<Result<UserInfo>> Login(string username, string password)
         {
-            UserInfoResult result = new UserInfoResult();
+            Result<UserInfo> result = new Result<UserInfo>();
             try
             {
                 if (username == password && (new NameValidator(username)).IsValid(loginlimit[0], loginlimit[1]))
@@ -33,18 +33,18 @@ namespace FunChat.Grains
 
                     //update state
                     var membershipresult = await channelregistry.UpdateMembership(userInfo);
-                    if (membershipresult.State == ResultState.Success)
+                    if (membershipresult.Success == true)
                     {
-                        for (int i = 0; i < membershipresult.Infos.Length; i++)
+                        for (int i = 0; i < membershipresult.Info.Length; i++)
                         {
-                            if (membershipresult.Infos[i].Name != generic)
-                                currentchannel.Add(membershipresult.Infos[i].Name);
+                            if (membershipresult.Info[i].Name != generic)
+                                currentchannel.Add(membershipresult.Info[i].Name);
                         }
                         //join generic chanel
                         var joinresult = await JoinChannel(generic, String.Empty);
-                        if (joinresult.State == ResultState.Success)
+                        if (joinresult.Success == true)
                         {
-                            result.State = ResultState.Success;
+                            result.Success = true;
                             result.Info = userInfo;
                         }
                     }
@@ -52,32 +52,32 @@ namespace FunChat.Grains
             }
             catch
             {
-                result.State = ResultState.Error;
+                result.Success = false;
             }
             return result;
         }
 
-        public async Task<CurrentChannelsResult> CurrentChannels()
+        public async Task<Result<string[]>> CurrentChannels()
         {
-            CurrentChannelsResult result = new CurrentChannelsResult();
+            Result<string[]> result = new Result<string[]>();
             try
             {
                 if (userInfo != null)
                 {
-                    result.Items = currentchannel.ToArray();
-                    result.State = ResultState.Success;
+                    result.Info = currentchannel.ToArray();
+                    result.Success = true;
                 }
             }
             catch
             {
-                result.State = ResultState.Error;
+                result.Success = false;
             }
             return await Task.FromResult(result);
         }
 
-        public async Task<ChannelInfoResult> LocateChannel(string channel)
+        public async Task<Result<ChannelInfo>> LocateChannel(string channel)
         {
-            ChannelInfoResult result = new ChannelInfoResult();
+            Result<ChannelInfo> result = new Result<ChannelInfo>();
             try
             {
                 if (userInfo != null)
@@ -88,14 +88,14 @@ namespace FunChat.Grains
             }
             catch
             {
-                result.State = ResultState.Error;
+                result.Success = false;
             }
             return result;
         }
 
-        public async Task<ChannelInfoResult> CreateChannel(string password)
+        public async Task<Result<ChannelInfo>> CreateChannel(string password)
         {
-            ChannelInfoResult result = new ChannelInfoResult();
+            Result<ChannelInfo> result = new Result<ChannelInfo>();
             try
             {
                 if (userInfo != null && (new NameValidator(password)).IsValid(channellimit[0], channellimit[1]))
@@ -107,14 +107,14 @@ namespace FunChat.Grains
             }
             catch
             {
-                result.State = ResultState.Error;
+                result.Success = false;
             }
             return result;
         }
 
-        public async Task<ChannelInfoResult> JoinChannel(string channel, string password)
+        public async Task<Result<ChannelInfo>> JoinChannel(string channel, string password)
         {
-            ChannelInfoResult result = new ChannelInfoResult();
+            Result<ChannelInfo> result = new Result<ChannelInfo>();
             try
             {
                 if (userInfo != null)
@@ -124,12 +124,12 @@ namespace FunChat.Grains
                         var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
                         result = (await channelregistry.GetChannel(channel));
                         //check if found in registry
-                        if (result.State == ResultState.Success && result.Info.Key != Guid.Empty)
+                        if (result.Success == true && result.Info.Key != Guid.Empty)
                         {
                             var cchannel = this.GrainFactory.GetGrain<IChannel>(result.Info.Key);
                             result = await cchannel.Join(userInfo, password);
                             //join suceess
-                            if (result.State == ResultState.Success)
+                            if (result.Success == true)
                             {
                                 //iterate if not generic
                                 if (result.Info.Name != generic && result.Info.Name != String.Empty)
@@ -140,20 +140,20 @@ namespace FunChat.Grains
                             }
                         }
                         else
-                            result.State = ResultState.Failed;
+                            result.Success = false;
                     }
                 }
             }
             catch
             {
-                result.State = ResultState.Error;
+                result.Success = false;
             }
             return result;
         }
 
-        public async Task<ChannelInfoResult> LeaveChannelByName(string channel)
+        public async Task<Result<ChannelInfo>> LeaveChannelByName(string channel)
         {
-            ChannelInfoResult result = new ChannelInfoResult();
+            Result<ChannelInfo> result = new Result<ChannelInfo>();
             try
             {
                 if (userInfo != null)
@@ -161,22 +161,22 @@ namespace FunChat.Grains
                     var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
                     result = await channelregistry.GetChannel(channel);
 
-                    if (result.State == ResultState.Success && result.Info.Key != Guid.Empty)
+                    if (result.Success == true && result.Info.Key != Guid.Empty)
                         result = await this.LeaveChannelByKey(result.Info.Key);
                     else
-                        result.State = ResultState.Failed;
+                        result.Success = false;
                 }
             }
             catch
             {
-                result.State = ResultState.Error;
+                result.Success = false;
             }
             return result;
         }
 
-        public async Task<ChannelInfoResult> LeaveChannelByKey(Guid channelguid)
+        public async Task<Result<ChannelInfo>> LeaveChannelByKey(Guid channelguid)
         {
-            ChannelInfoResult result = new ChannelInfoResult();
+            Result<ChannelInfo> result = new Result<ChannelInfo>();
             try
             {
                 if (userInfo != null)
@@ -186,7 +186,7 @@ namespace FunChat.Grains
                     if (await channel.Name() != generic)
                     {
                         result = await channel.Leave(userInfo.Name);
-                        if (result.State == ResultState.Success && result.Info.Name != String.Empty)
+                        if (result.Success == true && result.Info.Name != String.Empty)
                         {
                             if (currentchannel.Contains(result.Info.Name))
                                 currentchannel.Remove(result.Info.Name);
@@ -196,14 +196,14 @@ namespace FunChat.Grains
             }
             catch
             {
-                result.State = ResultState.Error;
+                result.Success = false;
             }
             return result;
         }
 
-        public async Task<ChannelInfoListResult> GetAllChannels()
+        public async Task<Result<ChannelInfo[]>> GetAllChannels()
         {
-            ChannelInfoListResult result = new ChannelInfoListResult();
+            Result<ChannelInfo[]> result = new Result<ChannelInfo[]>();
             try
             {
                 if (isadmin)
@@ -212,25 +212,25 @@ namespace FunChat.Grains
                     result = await channelregistry.GetAllChannels();
                 }
                 else
-                    result.State = ResultState.Failed;
+                    result.Success = false;
             }
             catch
             {
-                result.State = ResultState.Error;
+                result.Success = false;
             }
             return result;
         }
 
-        public async Task<MembersResult> GetChannelMembers(string channelname)
+        public async Task<Result<string[]>> GetChannelMembers(string channelname)
         {
-            MembersResult result = new MembersResult();
+            Result<string[]> result = new Result<string[]>();
             try
             {
                 if (isadmin || currentchannel.Contains(channelname) || channelname == generic)
                 {
                     var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
                     var channelInfoResult = await channelregistry.GetChannel(channelname);
-                    if (channelInfoResult.State == ResultState.Success)
+                    if (channelInfoResult.Success == true)
                     {
                         if (channelInfoResult.Info.Key != Guid.Empty)
                         {
@@ -242,21 +242,21 @@ namespace FunChat.Grains
             }
             catch
             {
-                result.State = ResultState.Error;
+                result.Success = false;
             }
             return result;
         }
 
-        public async Task<ChannelInfoResult> RemoveChannel(string channelname)
+        public async Task<Result<ChannelInfo>> RemoveChannel(string channelname)
         {
-            ChannelInfoResult result = new ChannelInfoResult();
+            Result<ChannelInfo> result = new Result<ChannelInfo>();
             try
             {
                 if (isadmin)
                 {
                     var channelregistry = this.GrainFactory.GetGrain<IChannelRegistry>(Guid.Empty);
                     result = await channelregistry.Remove(channelname);
-                    if (result.State == ResultState.Success)
+                    if (result.Success == true)
                     {
                         var channel = this.GrainFactory.GetGrain<IChannel>(result.Info.Key);
                         await channel.ClearMembers();
@@ -265,7 +265,7 @@ namespace FunChat.Grains
             }
             catch
             {
-                result.State = ResultState.Error;
+                result.Success = false;
             }
             return result;
         }

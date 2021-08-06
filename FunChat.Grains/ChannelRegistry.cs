@@ -21,9 +21,9 @@ namespace FunChat.Grains
             return base.OnActivateAsync();
         }
 
-        public async Task<ChannelInfoResult> Add(string name, string password)
+        public async Task<Result<ChannelInfo>> Add(string name, string password)
         {
-            ChannelInfoResult result = new ChannelInfoResult();
+            Result<ChannelInfo> result = new Result<ChannelInfo>();
             try
             {
                 Guid guid;
@@ -31,7 +31,7 @@ namespace FunChat.Grains
                 if (activechannels.ContainsKey(name))
                 {
                     activechannels.TryGetValue(name, out guid);
-                    result.State = ResultState.Failed;
+                    result.Success = false;
                     result.Info = new ChannelInfo() { Key = guid, Name = name };
                 }
                 else
@@ -41,64 +41,64 @@ namespace FunChat.Grains
                     await nchannel.Initialize(new ChannelInfo() { Key = nguid, Name = name }, password);
                     activechannels.Add(name, nguid);
 
-                    result.State = ResultState.Success;
+                    result.Success = true;
                     result.Info = new ChannelInfo() { Key = guid, Name = name };
                 }
             }
             catch
             {
-                result.State = ResultState.Error;
+                result.Success = false;
             }
             return result;
         }
 
-        public async Task<ChannelInfoResult> GetChannel(string name)
+        public async Task<Result<ChannelInfo>> GetChannel(string name)
         {
-            ChannelInfoResult result = new ChannelInfoResult();
+            Result<ChannelInfo> result = new Result<ChannelInfo>();
 
             Guid guid = Guid.Empty;
             if (activechannels.ContainsKey(name))
                 activechannels.TryGetValue(name, out guid);
 
             if (guid == Guid.Empty)
-                result.State = ResultState.Failed;
+                result.Success = false;
             else
             {
-                result.State = ResultState.Success;
+                result.Success = true;
                 result.Info = new ChannelInfo() { Key = guid, Name = name };
             }
 
             return await Task.FromResult(result);
         }
 
-        public async Task<ChannelInfoListResult> GetAllChannels()
+        public async Task<Result<ChannelInfo[]>> GetAllChannels()
         {
-            ChannelInfoListResult result = new ChannelInfoListResult();
+            Result<ChannelInfo[]> result = new Result<ChannelInfo[]>();
             if (activechannels.Count > 0)
-                result.Infos = activechannels.Select(s => new ChannelInfo() { Key = s.Value, Name = s.Key }).ToArray();
-            result.State = ResultState.Success;
+                result.Info = activechannels.Select(s => new ChannelInfo() { Key = s.Value, Name = s.Key }).ToArray();
+            result.Success = true;
             return await Task.FromResult(result);
         }
 
-        public async Task<ChannelInfoResult> Remove(string name)
+        public async Task<Result<ChannelInfo>> Remove(string name)
         {
-            ChannelInfoResult result = new ChannelInfoResult();
+            Result<ChannelInfo> result = new Result<ChannelInfo>();
             if (generic != name && activechannels.ContainsKey(name))
             {
                 activechannels.TryGetValue(name, out Guid guid);
                 if (guid != Guid.Empty)
                 {
                     activechannels.Remove(name);
-                    result.State = ResultState.Success;
+                    result.Success = true;
                     result.Info = new ChannelInfo() { Key = guid, Name = name };
                 }
             }
             return await Task.FromResult(result);
         }
 
-        public async Task<ChannelInfoListResult> UpdateMembership(UserInfo userinfo)
+        public async Task<Result<ChannelInfo[]>> UpdateMembership(UserInfo userinfo)
         {
-            ChannelInfoListResult result = new ChannelInfoListResult();
+            Result<ChannelInfo[]> result = new Result<ChannelInfo[]>();
             try
             {
                 List<ChannelInfo> channels = new List<ChannelInfo>();
@@ -108,7 +108,7 @@ namespace FunChat.Grains
                 {
                     var channel = this.GrainFactory.GetGrain<IChannel>(item.Value);
                     var channelinforesult = await channel.UpdateUserInfo(userinfo);
-                    if (channelinforesult.State == ResultState.Success && channelinforesult.Info.Key != Guid.Empty)
+                    if (channelinforesult.Success == true && channelinforesult.Info.Key != Guid.Empty)
                     {
                         ctr++;
                         channels.Add(channelinforesult.Info);
@@ -116,12 +116,12 @@ namespace FunChat.Grains
                     if (ctr == maxchannel)
                         break;
                 }
-                result.State = ResultState.Success;
-                result.Infos = channels.ToArray();
+                result.Success = true;
+                result.Info = channels.ToArray();
             }
             catch
             {
-                result.State = ResultState.Error;
+                result.Success = false;
             }
             return result;
         }

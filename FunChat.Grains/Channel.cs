@@ -48,9 +48,9 @@ namespace FunChat.Grains
             return await Task.FromResult(iswritten);
         }
 
-        public async Task<ChannelInfoResult> Join(UserInfo userInfo, string password)
+        public async Task<Result<ChannelInfo>> Join(UserInfo userInfo, string password)
         {
-            ChannelInfoResult result = new ChannelInfoResult();
+            Result<ChannelInfo> result = new Result<ChannelInfo>();
             if (this.password == password)
             {
                 if (members.ContainsKey(userInfo.Name))
@@ -61,55 +61,55 @@ namespace FunChat.Grains
                 else
                     members.Add(userInfo.Name, userInfo.Key);
 
-                result.State = ResultState.Success;
+                result.Success = true;
                 result.Info = new ChannelInfo() { Name = this.channelinfo.Name, Key = this.channelinfo.Key };
             }
             return await Task.FromResult(result);
         }
 
-        public async Task<ChannelInfoResult> Leave(string username)
+        public async Task<Result<ChannelInfo>> Leave(string username)
         {
-            ChannelInfoResult result = new ChannelInfoResult();
+            Result<ChannelInfo> result = new Result<ChannelInfo>();
             if (members.ContainsKey(username))
             {
                 members.Remove(username);
 
-                result.State = ResultState.Success;
+                result.Success = true;
                 result.Info = new ChannelInfo() { Name = this.channelinfo.Name, Key = this.channelinfo.Key };
             }
             return await Task.FromResult(result);
         }
 
-        public async Task<ChannelInfoResult> UpdateUserInfo(UserInfo userInfo)
+        public async Task<Result<ChannelInfo>> UpdateUserInfo(UserInfo userInfo)
         {
-            ChannelInfoResult result = new ChannelInfoResult();
+            Result<ChannelInfo> result = new Result<ChannelInfo>();
             if (members.ContainsKey(userInfo.Name))
             {
                 if (members[userInfo.Name] != userInfo.Key)
                     members[userInfo.Name] = userInfo.Key;
 
-                result.State = ResultState.Success;
+                result.Success = true;
                 result.Info = new ChannelInfo() { Name = this.channelinfo.Name, Key = this.channelinfo.Key };
             }
             return await Task.FromResult(result);
         }
 
-        public async Task<MessageListResult> ReadHistory()
+        public async Task<Result<Message[]>> ReadHistory()
         {
-            MessageListResult result = new MessageListResult();
+            Result<Message[]> result = new Result<Message[]>();
             if (buffer >= messages.Count)
-                result.Messages = messages.ToArray();
+                result.Info = messages.ToArray();
             else
-                result.Messages = messages.Skip(messages.Count - buffer).ToArray();
+                result.Info = messages.Skip(messages.Count - buffer).ToArray();
 
-            result.State = ResultState.Success;
+            result.Success = true;
 
             return await Task.FromResult(result);
         }
 
-        public async Task<MembersResult> GetMembers()
+        public async Task<Result<string[]>> GetMembers()
         {
-            return await Task.FromResult(new MembersResult() { State = ResultState.Success, Items = members.Keys.ToArray() });
+            return await Task.FromResult(new Result<string[]>() { Success = true, Info = members.Keys.ToArray() });
         }
 
         public async Task ClearMembers()

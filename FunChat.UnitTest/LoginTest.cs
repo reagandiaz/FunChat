@@ -21,15 +21,15 @@ namespace FunChat.UnitTest
         internal async Task Login(string username, string password, bool isvalid)
         {
             var user = _cluster.GrainFactory.GetGrain<IUser>(Guid.NewGuid());
-            UserInfoResult result = new UserInfoResult();
+            Result<UserInfo> result = new Result<UserInfo>();
 
             if (user != null)
                 result = await user.Login(username, password);
 
             if (isvalid)
-                Assert.True(result.State == ResultState.Success);
+                Assert.True(result.Success == true);
             else
-                Assert.True(result.State == ResultState.Failed);
+                Assert.True(result.Success == false);
         }
 
 

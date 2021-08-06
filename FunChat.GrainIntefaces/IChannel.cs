@@ -7,12 +7,12 @@ namespace FunChat.GrainIntefaces
     {
         Task Initialize(ChannelInfo channelinfo, string password);
         Task<string> Name();
-        Task<ChannelInfoResult> Join(UserInfo userInfo, string password);
-        Task<ChannelInfoResult> Leave(string username);
-        Task<ChannelInfoResult> UpdateUserInfo(UserInfo userInfo);
+        Task<Result<ChannelInfo>> Join(UserInfo userInfo, string password);
+        Task<Result<ChannelInfo>> Leave(string username);
+        Task<Result<ChannelInfo>> UpdateUserInfo(UserInfo userInfo);
         Task<bool> Message(UserInfo userinfo, Message msg);
-        Task<MessageListResult> ReadHistory();
-        Task<MembersResult> GetMembers();
+        Task<Result<Message[]>> ReadHistory();
+        Task<Result<string[]>> GetMembers();
         Task ClearMembers();
     }
 }

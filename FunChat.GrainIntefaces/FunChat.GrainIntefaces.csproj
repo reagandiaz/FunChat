@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <Compile Remove="IHello.cs" />
+    <Compile Remove="xResult.cs" />
   </ItemGroup>
 
   <ItemGroup>
